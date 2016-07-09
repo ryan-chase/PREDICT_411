@@ -1,0 +1,33 @@
+Libname PRED411 '/home/ryanjohnchase/PRED411';
+
+PROC PRINT 
+	DATA = PRED411.Moneyball(obs=10); run; quit; 
+	
+DATA Moneyball_data; 
+	SET PRED411.Moneyball;
+	
+PROC MEANS DATA = Moneyball_data n nmiss mean stddev min max; 
+run; 
+
+DATA Moneyball_data_2; 
+	SET Moneyball_data;
+	DROP TEAM_BATTING_HBP; 
+
+PROC CORR DATA = Moneyball_data_2; 
+VAR 
+TEAM_BATTING_H
+TEAM_BATTING_2B
+TEAM_BATTING_3B
+TEAM_BATTING_HR
+TEAM_BATTING_BB
+TEAM_BATTING_SO
+TEAM_BASERUN_SB
+TEAM_BASERUN_CS
+TEAM_PITCHING_H
+TEAM_PITCHING_HR
+TEAM_PITCHING_BB
+TEAM_PITCHING_SO
+TEAM_FIELDING_E
+TEAM_FIELDING_DP;
+With TARGET_WINS;
+run; 
