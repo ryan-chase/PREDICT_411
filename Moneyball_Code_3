@@ -1,0 +1,508 @@
+%let PATH = /home/ryanjohnchase/PRED411;
+%let FOLDER_NAME = PRED411; 
+
+/*Create a library */
+libname &FOLDER_NAME "&PATH"; run; 
+/*Libname PRED411 '/home/ryanjohnchase/PRED411'; run; */
+
+%let ORIGINAL_DATASET = Moneyball;
+PROC PRINT DATA = &FOLDER_NAME..&ORIGINAL _DATASET(obs=10); run; quit;
+/* PROC PRINT DATA = PRED411.Moneyball(obs=10); run; quit; */ 
+
+%let ORIGINAL_DATASET_COPY = Moneyball_data 
+
+%let TRAINING_AND_TEST_DATASET = Moneyball_Training_and_Test_data
+
+%let TRAINING_DATASET =  Moneyball_Training_data
+
+%let TRAINING_DATASET_CLEANSED = Moneyball_Training_data_cleansed 
+
+/* to delete a datset (if needed) 
+proc datasets library=work;
+   delete Moneyball_data;
+run;
+*/ 
+
+/*Save data into another table*/ 
+DATA &FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
+	SET &FOLDER_NAME..&ORIGINAL_DATASET;
+run; 
+
+
+
+
+
+/*List out the column names and data types for the data set*/
+PROC CONTENTS data=&FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
+run; quit;
+
+/*look at the data set*/ 
+PROC MEANS DATA = &FOLDER_NAME..&ORIGIAL_DATASET_COPY n nmiss mean stddev min max; 
+run; 
+
+
+/* find the error that I need to beat*/ 
+/* Calculate the Error associated with the mean*/
+/*The total sum of squares*/  
+DATA &FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
+set &FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
+ERROR = TARGET_WINS - 80.79;
+ABS_ERROR = ABS(ERROR);
+SQUARED_ERROR = ERROR**2;
+run; 
+
+/* Calculate the sum of squared error*/ 
+PROC MEANS Data= &FOLDER_NAME..&ORIGIAL_DATASET_COPY SUM; 
+var SQUARED_ERROR; 
+run; 
+
+/*calculate the absolute average error (MAE) */ 
+/*the result is +/- 12 wins */
+PROC MEANS Data= &FOLDER_NAME..&ORIGIAL_DATASET_COPY MEAN; 
+var ABS_ERROR; 
+run; 
+
+
+/*Create training/testing datasets*/ 
+/*Split our data into a training and a test set*/
+data &FOLDER_NAME..&TRAINING_AND_TEST_DATASET;
+  set &FOLDER_NAME..&ORIGIAL_DATASET_COPY;
+*generate a uniform (0,1) random variable with seed set to 123; 
+u=uniform(123); 
+if (u<0.70) then train = 1; 
+else train = 0; 
+run; 
+
+
+/*table of our training/testing observation counts*/ 
+PROC FREQ data=&FOLDER_NAME..&TRAINING_AND_TEST_DATASET; 
+  tables train; 
+run; quit;
+
+
+/*Save the training dataset as it's own dataset*/ 
+DATA &FOLDER_NAME..&TRAINING_DATASET; 
+  SET &FOLDER_NAME..&TRAINING_AND_TEST_DATASET;
+  WHERE train = 1;
+run;
+
+/*Save the testing dataset as it's own dataset*/ 
+DATA &FOLDER_NAME..&TESTING_DATASET; 
+  SET &FOLDER_NAME..&TRAINING_AND_TEST_DATASET;
+  WHERE train = 0;
+run;
+
+/*look at the testing dataset */ 
+proc print data=&FOLDER_NAME..&TESTING_DATASET(obs=10); run; quit; 
+
+/*Look at the descriptive statistics form the original dataset*/ 
+PROC MEANS DATA = &FOLDER_NAME..&ORIGIAL_DATASET_COPY n nmiss mean stddev min max; 
+run; 
+
+/* Remove Team_Batting_HBP (hit by pitch) as there are only 191 non-missing values in of 2,276 observations in the dataset
+Additionally, remove TEAM_BASERUN_CS (caught stealing) as there are too many missing values.
+Note: imputing these with the average is too risky (see formal write up) */ 
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED; 
+	SET &FOLDER_NAME..&TRAINING_DATASET;
+	DROP TEAM_BATTING_HBP;
+	DROP TEAM_BASERUN_CS; 
+run; 
+
+
+
+
+
+
+
+
+/* Impute values for missing observations*/ 
+ 
+/* Create indicator variables to identifty which observations were imputed*/ 
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED;
+		M_Team_Batting_SO = 0;		 
+		M_Team_Baserun_SB = 0;
+		M_Team_Baserun_CS = 0; 
+		M_Team_Pitching_SO = 0;
+		M_Team_Fielding_DP = 0; 
+run; 
+
+/* Impute missing values for Team_Batting_SO to be the average for those columns so
+as to make the most minimal impact.  Note that doing so could reduce the standard error
+and the p-value associated with these variables*/
+
+/*I'll need to extend this practice to all variables in my end model*/ 
+
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	if missing (Team_Batting_SO) THEN do 
+	Team_Batting_SO = 735; 
+	M_Team_Batting_SO = 1;
+End; 
+
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	if missing (Team_Baserun_SB) THEN do 
+		Team_Baserun_SB = 125; 
+		M_Team_Baserun_SB = 1;
+End; 
+
+Data &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	if missing(Team_Pitching_SO) THEN do
+	Team_Pitching_SO = 818; 
+	M_Team_Pitching_SO = 1;
+End; 
+
+Data &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	if missing(Team_Fielding_DP) THEN do
+	Team_Fielding_DP = 146; 
+	M_Team_Fielding_DP = 1; 
+End; 
+
+
+/*Remove some obvious outliers*/ 
+/*Note that in implementation, I'm not going to be able to remove the 
+outliers and/or missing variables, so I'll create logic to impute them
+to be a sensable value*/ 
+
+/*first investigate all the outliers using PROC Univariate*/ 
+PROC Univariate data= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2 plot;
+
+/* remove the observations that have HR = 0 */ 
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	IF TEAM_BATTING_HR = 0 then delete;
+run;    
+
+/*remove the outlier with Team Pitching Hits*/ 
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	IF TEAM_PITCHING_H > 5579 then delete;
+run;  
+
+/*remove the outliers for team pitching strikeouts*/ 
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	IF TEAM_PITCHING_SO > 1600 then delete;
+run;  
+
+/*remove the outliers for team batting strikouts*/ 
+PROC UNIVARIATE data = &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2 plot; var Team_BATTING_SO; run; 
+
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	IF TEAM_BATTING_SO = 0 then delete;
+run;  
+
+
+/*RC: Return to this later potentially */ 
+/* Save the dataset without outlier to a new dataset */ 
+/*DATA moneyball_data_4;
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	LOG_Team_Pitching_H = log(Team_Pitching_H); 
+	Cap_Team_Pitching_H = Team_Pitching_H; 
+	IF Cap_Team_Pitching_H < 1244 then Cap_Team_Pitching_H = 1244; 
+	IF Cap_Team_Pitching_H > 7000 then Cap_Team_Pitching_H = 7000; 
+	IF __________
+run; 
+*/
+
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3; 
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+run; 
+
+
+/* Look at the correlation between the response variable and each of the explanatory variables */ 
+PROC CORR DATA = &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3; 
+VAR 
+TEAM_BATTING_H
+TEAM_BATTING_2B
+TEAM_BATTING_3B
+TEAM_BATTING_HR
+TEAM_BATTING_BB
+TEAM_BATTING_SO
+TEAM_BASERUN_SB
+TEAM_PITCHING_H
+TEAM_PITCHING_HR
+TEAM_PITCHING_BB
+TEAM_PITCHING_SO
+TEAM_FIELDING_E
+TEAM_FIELDING_DP;
+With TARGET_WINS;
+run;  
+
+
+/*Look at the dataset again */ 
+PROC MEANS DATA = &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3 n nmiss mean stddev min max; 
+run; 
+
+/* Run first regression */ 
+PROC REG DATA= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+MODEL TARGET_WINS =
+TEAM_BATTING_H
+TEAM_BATTING_2B
+TEAM_BATTING_3B
+TEAM_BATTING_HR
+TEAM_BATTING_BB
+TEAM_BATTING_SO
+TEAM_BASERUN_SB
+TEAM_PITCHING_H
+TEAM_PITCHING_HR
+TEAM_PITCHING_BB
+TEAM_PITCHING_SO
+TEAM_FIELDING_E
+TEAM_FIELDING_DP;
+run;
+
+/* Run PROC Univariate which will run a simple bi-variate regressions for each 
+variable in the data */ 
+
+PROC UNIVARIATE DATA= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3 plot;
+VAR
+TEAM_BATTING_H
+TEAM_BATTING_2B
+TEAM_BATTING_3B
+TEAM_BATTING_HR
+TEAM_BATTING_BB
+TEAM_BATTING_SO
+TEAM_BASERUN_SB
+TEAM_BASERUN_CS
+TEAM_PITCHING_H
+TEAM_PITCHING_HR
+TEAM_PITCHING_BB
+TEAM_PITCHING_SO
+TEAM_FIELDING_E
+TEAM_FIELDING_DP;
+run;
+
+
+
+/* Check the results */ 
+
+PROC Univariate data= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3 plot; 
+VAR Team_Pitching_H Log_Team_Pitching_H Cap_Team_Pitching_H;
+
+
+/* Run another regression */ 
+
+PROC REG DATA= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+MODEL TARGET_WINS =
+	TEAM_BATTING_H
+	TEAM_BATTING_2B
+	TEAM_BATTING_3B
+	TEAM_BATTING_HR
+	TEAM_BATTING_BB
+	TEAM_BATTING_SO
+	TEAM_BASERUN_SB
+	TEAM_BASERUN_CS
+	LOG_TEAM_PITCHING_H
+	CAP_TEAM_PITCHING_H
+	TEAM_PITCHING_HR
+	TEAM_PITCHING_BB
+	TEAM_PITCHING_SO
+	TEAM_FIELDING_E
+	TEAM_FIELDING_DP
+/selection = forward vif;  *using forward variable selection
+run;
+quit; 
+
+/*create a training and testing table*/ 
+
+/*Transform the variables that are not normal*/ 
+
+/*Square, square root, and log */ 
+
+/*run through proc corr, proc reg, and proc uniariate*/ 
+
+/*proc univariate is running each one at a time*/ 
+
+/*save data into a new table*/ 
+
+/* add a variable for singles */ 
+DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+/*IMP_Team_Batting_SO = Team_Batting_SO;*/ 
+M_Team_Batting_SO = 0;
+
+/*look at significance then remove outliers. 
+or remove outlier, then do the significance*/
+
+/*Check to make sure errors are normal*/ 
+
+  
+/* Now, remove the predictor variables that don't have a low p-value, and run another regression using the below variables */ 
+proc reg;
+ model SalePrice = GrLivArea GarageArea TotalBsmtSF FirstFlrSF MasVnrArea BsmtFinSF1 BsmtUnfSF/
+    selection=rsquare start=1 stop=1;
+run;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Look at the testing dataset */ 
+PROC PRINT DATA = Moneyball_test(obs=3); 
+run; 
+
+DATA scorefile; 
+SET Moneyball_test
+
+
+
+/*Apply the same data cleanup steps that I did to the training model, but 
+this time I'm unable to delete the observations that contain missing values and/or outliers. 
+Therefore, I'm going to create some logic to ensure they're imputed to be within the model range.*/ 
+
+/*note, the averages (for missing values) and extreme values were the one's 
+found after removing the outliers and missing values in the training dataset*/ 
+PROC MEANS DATA = moneyball_data_4 n nmiss mean stddev min max; 
+run; 
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BATTING_H = . then TEAM_BATTING_H = 1463.26;
+	IF TEAM_BATTING_H < 1137 then TEAM_BATTING_H = 1137; 
+	IF TEAM_BATTING_H  > 2273 then TEAM_BATTING_H = 2273; 
+run; 
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BATTING_2B = . then TEAM_BATTING_H = 241.40;
+	IF TEAM_BATTING_2B < 113 then TEAM_BATTING_H = 113; 
+	IF TEAM_BATTING_2B  > 458 then TEAM_BATTING_H = 458; 
+run; 
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BATTING_3B = . then TEAM_BATTING_H = 54;
+	IF TEAM_BATTING_3B < 11 then TEAM_BATTING_H = 11; 
+	IF TEAM_BATTING_3B  > 190 then TEAM_BATTING_H = 190; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BATTING_HR = . then TEAM_BATTING_H = 101;
+	IF TEAM_BATTING_HR < 3 then TEAM_BATTING_H = 3; 
+	IF TEAM_BATTING_HR  > 264 then TEAM_BATTING_H = 264; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BATTING_BB = . then TEAM_BATTING_H = 510;
+	IF TEAM_BATTING_BB < 52 then TEAM_BATTING_H = 52; 
+	IF TEAM_BATTING_BB  > 878 then TEAM_BATTING_H = 878; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BATTING_SO = . then TEAM_BATTING_H = 747;
+	IF TEAM_BATTING_SO < 99 then TEAM_BATTING_H = 99; 
+	IF TEAM_BATTING_SO  > 1399 then TEAM_BATTING_H = 1399; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_BASERUN_SB = . then TEAM_BATTING_H = 124;
+	IF TEAM_BASERUN_SB <  18 then TEAM_BATTING_H = 18; 
+	IF TEAM_BASERUN_SB  > 697 then TEAM_BATTING_H = 697; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_PITCHING_H = . then TEAM_BATTING_H = 1614;
+	IF TEAM_PITCHING_H <  1137 then TEAM_BATTING_H = 1137; 
+	IF TEAM_PITCHING_H  > 5579 then TEAM_BATTING_H = 5579; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_PITCHING_HR = . then TEAM_BATTING_H = 106;
+	IF TEAM_PITCHING_HR <  3 then TEAM_BATTING_H = 3; 
+	IF TEAM_PITCHING_HR  > 343 then TEAM_BATTING_H = 343; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_PITCHING_BB = . then TEAM_BATTING_H = 548;
+	IF TEAM_PITCHING_BB <  144 then TEAM_BATTING_H = 144; 
+	IF TEAM_PITCHING_BB  > 1123 then TEAM_BATTING_H = 1123; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_PITCHING_SO = . then TEAM_BATTING_H = 804;
+	IF TEAM_PITCHING_SO <  270 then TEAM_BATTING_H = 270; 
+	IF TEAM_PITCHING_SO  > 1600 then TEAM_BATTING_H = 1600; 
+run;
+ 
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_FIELDING_E = . then TEAM_BATTING_H = 223;
+	IF TEAM_FIELDING_E <  65 then TEAM_BATTING_H = 65; 
+	IF TEAM_FIELDING_E  > 1515 then TEAM_BATTING_H = 1515; 
+run;
+
+DATA moneyball_testing_data; 
+	SET moneyball_testing_data;
+	IF TEAM_FIELDING_DP = . then TEAM_BATTING_H = 146;
+	IF TEAM_FIELDING_DP <  52 then TEAM_BATTING_H = 52; 
+	IF TEAM_FIELDING_DP  > 228 then TEAM_BATTING_H = 228; 
+run;
+
+
+	
+
+
+/* Score the final model using the testing data */ 
+P_Target_Wins = 
+_____	*coefficient 
++ _____  *var1 
++ _____  *var2
+
+PROC PRINT DATA = Scorefile(obs=5); 
+run; 
+
+
+/* Keep only the variables that you need */ 
+Keep INDEX; 
+Keep P_Target_Wins;
+
+/*Output the results of your model */ 
+DATA outlib.Ryan_Chase_Regression_Results
+SET Scorefile 
+run; 
+
+/* Calculate the Error */ 
+DATA Scorefile; 
+set Scorefile; 
+ERROR = TARGET_WINS - P_Target_Wins
+ERROR = ERROR**2
+run; 
+
+/* Calculate the sum of squared error* 
+PROC MEANS Data- Scorefile MEAN SUM: 
+var ERROR: 
+run; 
+
+
+/* in the write up talk about variables who's coefficinets don't make sense */ 
+
+
+
+
