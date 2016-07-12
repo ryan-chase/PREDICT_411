@@ -1,13 +1,12 @@
 %let PATH = /home/ryanjohnchase/PRED411;
-%let FOLDER_NAME = PRED411; 
+%let LIB_NAME = PRED411; 
 
 /*Create a library */
-libname &FOLDER_NAME "&PATH"; run; 
+libname &LIB_NAME "&PATH"; run; 
+/*note that my "folder" was also called PRED411.  I used the same name for my library*/ 
 /*Libname PRED411 '/home/ryanjohnchase/PRED411'; run; */
 
 %let ORIGINAL_DATASET = Moneyball;
-PROC PRINT DATA = &FOLDER_NAME..&ORIGINAL _DATASET(obs=10); run; quit;
-/* PROC PRINT DATA = PRED411.Moneyball(obs=10); run; quit; */ 
 
 %let ORIGINAL_DATASET_COPY = Moneyball_data 
 
@@ -15,58 +14,62 @@ PROC PRINT DATA = &FOLDER_NAME..&ORIGINAL _DATASET(obs=10); run; quit;
 
 %let TRAINING_DATASET =  Moneyball_Training_data
 
-%let TRAINING_DATASET_CLEANSED = Moneyball_Training_data_cleansed 
+%let TRAINING_DATASET_CLEANSED = Moneyball_Training_data_cleansed
+
+%let  TRAINING_DATASET_CLEANSED_2 = Moneyball_Training_data_cleansed_2
+
+%let TRAINING_DATASET_CLEANSED_3 = Moneyball_Training_data_cleansed_3
+
+/*Print the original dataset */ 
+PROC PRINT DATA = &LIB_NAME..&ORIGINAL _DATASET(obs=10); run; quit;
+/* PROC PRINT DATA = PRED411.Moneyball(obs=10); run; quit; */ 
 
 /* to delete a datset (if needed) 
-proc datasets library=work;
-   delete Moneyball_data;
+proc datasets library= &LIB_NAME;
+   delete &MACRO_VARIABLE _NAME _HERE;
 run;
 */ 
 
 /*Save data into another table*/ 
-DATA &FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
-	SET &FOLDER_NAME..&ORIGINAL_DATASET;
+DATA &LIB_NAME..&ORIGIAL_DATASET_COPY; 
+	SET &LIB_NAME..&ORIGINAL_DATASET;
 run; 
 
-
-
-
-
 /*List out the column names and data types for the data set*/
-PROC CONTENTS data=&FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
+PROC CONTENTS data=&LIB_NAME..&ORIGIAL_DATASET_COPY; 
 run; quit;
 
 /*look at the data set*/ 
-PROC MEANS DATA = &FOLDER_NAME..&ORIGIAL_DATASET_COPY n nmiss mean stddev min max; 
+PROC MEANS DATA = &LIB_NAME..&ORIGIAL_DATASET_COPY n nmiss mean stddev min max; 
 run; 
 
 
 /* find the error that I need to beat*/ 
 /* Calculate the Error associated with the mean*/
 /*The total sum of squares*/  
-DATA &FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
-set &FOLDER_NAME..&ORIGIAL_DATASET_COPY; 
+DATA &LIB_NAME..&ORIGIAL_DATASET_COPY; 
+set &LIB_NAME..&ORIGIAL_DATASET_COPY; 
 ERROR = TARGET_WINS - 80.79;
 ABS_ERROR = ABS(ERROR);
 SQUARED_ERROR = ERROR**2;
 run; 
 
 /* Calculate the sum of squared error*/ 
-PROC MEANS Data= &FOLDER_NAME..&ORIGIAL_DATASET_COPY SUM; 
+PROC MEANS Data= &LIB_NAME..&ORIGIAL_DATASET_COPY SUM; 
 var SQUARED_ERROR; 
 run; 
 
 /*calculate the absolute average error (MAE) */ 
 /*the result is +/- 12 wins */
-PROC MEANS Data= &FOLDER_NAME..&ORIGIAL_DATASET_COPY MEAN; 
+PROC MEANS Data= &LIB_NAME..&ORIGIAL_DATASET_COPY MEAN; 
 var ABS_ERROR; 
 run; 
 
 
 /*Create training/testing datasets*/ 
 /*Split our data into a training and a test set*/
-data &FOLDER_NAME..&TRAINING_AND_TEST_DATASET;
-  set &FOLDER_NAME..&ORIGIAL_DATASET_COPY;
+data &LIB_NAME..&TRAINING_AND_TEST_DATASET;
+  set &LIB_NAME..&ORIGIAL_DATASET_COPY;
 *generate a uniform (0,1) random variable with seed set to 123; 
 u=uniform(123); 
 if (u<0.70) then train = 1; 
@@ -75,51 +78,46 @@ run;
 
 
 /*table of our training/testing observation counts*/ 
-PROC FREQ data=&FOLDER_NAME..&TRAINING_AND_TEST_DATASET; 
+PROC FREQ data=&LIB_NAME..&TRAINING_AND_TEST_DATASET; 
   tables train; 
 run; quit;
 
 
 /*Save the training dataset as it's own dataset*/ 
-DATA &FOLDER_NAME..&TRAINING_DATASET; 
-  SET &FOLDER_NAME..&TRAINING_AND_TEST_DATASET;
+DATA &LIB_NAME..&TRAINING_DATASET; 
+  SET &LIB_NAME..&TRAINING_AND_TEST_DATASET;
   WHERE train = 1;
 run;
 
 /*Save the testing dataset as it's own dataset*/ 
-DATA &FOLDER_NAME..&TESTING_DATASET; 
-  SET &FOLDER_NAME..&TRAINING_AND_TEST_DATASET;
+DATA &LIB_NAME..&TESTING_DATASET; 
+  SET &LIB_NAME..&TRAINING_AND_TEST_DATASET;
   WHERE train = 0;
 run;
 
 /*look at the testing dataset */ 
-proc print data=&FOLDER_NAME..&TESTING_DATASET(obs=10); run; quit; 
+proc print data=&LIB_NAME..&TESTING_DATASET(obs=10); run; quit; 
 
 /*Look at the descriptive statistics form the original dataset*/ 
-PROC MEANS DATA = &FOLDER_NAME..&ORIGIAL_DATASET_COPY n nmiss mean stddev min max; 
+PROC MEANS DATA = &LIB_NAME..&ORIGIAL_DATASET_COPY n nmiss mean stddev min max; 
 run; 
 
 /* Remove Team_Batting_HBP (hit by pitch) as there are only 191 non-missing values in of 2,276 observations in the dataset
 Additionally, remove TEAM_BASERUN_CS (caught stealing) as there are too many missing values.
 Note: imputing these with the average is too risky (see formal write up) */ 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED; 
-	SET &FOLDER_NAME..&TRAINING_DATASET;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED; 
+	SET &LIB_NAME..&TRAINING_DATASET;
 	DROP TEAM_BATTING_HBP;
 	DROP TEAM_BASERUN_CS; 
 run; 
 
 
 
-
-
-
-
-
 /* Impute values for missing observations*/ 
  
 /* Create indicator variables to identifty which observations were imputed*/ 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED;
 		M_Team_Batting_SO = 0;		 
 		M_Team_Baserun_SB = 0;
 		M_Team_Baserun_CS = 0; 
@@ -133,29 +131,29 @@ and the p-value associated with these variables*/
 
 /*I'll need to extend this practice to all variables in my end model*/ 
 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	if missing (Team_Batting_SO) THEN do 
 	Team_Batting_SO = 735; 
 	M_Team_Batting_SO = 1;
 End; 
 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	if missing (Team_Baserun_SB) THEN do 
 		Team_Baserun_SB = 125; 
 		M_Team_Baserun_SB = 1;
 End; 
 
-Data &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+Data &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	if missing(Team_Pitching_SO) THEN do
 	Team_Pitching_SO = 818; 
 	M_Team_Pitching_SO = 1;
 End; 
 
-Data &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+Data &LIB_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	if missing(Team_Fielding_DP) THEN do
 	Team_Fielding_DP = 146; 
 	M_Team_Fielding_DP = 1; 
@@ -168,31 +166,31 @@ outliers and/or missing variables, so I'll create logic to impute them
 to be a sensable value*/ 
 
 /*first investigate all the outliers using PROC Univariate*/ 
-PROC Univariate data= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2 plot;
+PROC Univariate data= &LIB_NAME..&TRAINING_DATASET_CLEANSED_2 plot;
 
 /* remove the observations that have HR = 0 */ 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	IF TEAM_BATTING_HR = 0 then delete;
 run;    
 
 /*remove the outlier with Team Pitching Hits*/ 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	IF TEAM_PITCHING_H > 5579 then delete;
 run;  
 
 /*remove the outliers for team pitching strikeouts*/ 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	IF TEAM_PITCHING_SO > 1600 then delete;
 run;  
 
 /*remove the outliers for team batting strikouts*/ 
-PROC UNIVARIATE data = &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2 plot; var Team_BATTING_SO; run; 
+PROC UNIVARIATE data = &LIB_NAME..&TRAINING_DATASET_CLEANSED_2 plot; var Team_BATTING_SO; run; 
 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_2; 
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	IF TEAM_BATTING_SO = 0 then delete;
 run;  
 
@@ -200,7 +198,7 @@ run;
 /*RC: Return to this later potentially */ 
 /* Save the dataset without outlier to a new dataset */ 
 /*DATA moneyball_data_4;
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2;
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2;
 	LOG_Team_Pitching_H = log(Team_Pitching_H); 
 	Cap_Team_Pitching_H = Team_Pitching_H; 
 	IF Cap_Team_Pitching_H < 1244 then Cap_Team_Pitching_H = 1244; 
@@ -209,13 +207,13 @@ run;
 run; 
 */
 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3; 
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_2; 
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_3; 
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_2; 
 run; 
 
 
 /* Look at the correlation between the response variable and each of the explanatory variables */ 
-PROC CORR DATA = &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3; 
+PROC CORR DATA = &LIB_NAME..&TRAINING_DATASET_CLEANSED_3; 
 VAR 
 TEAM_BATTING_H
 TEAM_BATTING_2B
@@ -235,11 +233,11 @@ run;
 
 
 /*Look at the dataset again */ 
-PROC MEANS DATA = &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3 n nmiss mean stddev min max; 
+PROC MEANS DATA = &LIB_NAME..&TRAINING_DATASET_CLEANSED_3 n nmiss mean stddev min max; 
 run; 
 
 /* Run first regression */ 
-PROC REG DATA= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+PROC REG DATA= &LIB_NAME..&TRAINING_DATASET_CLEANSED_3;
 MODEL TARGET_WINS =
 TEAM_BATTING_H
 TEAM_BATTING_2B
@@ -259,7 +257,7 @@ run;
 /* Run PROC Univariate which will run a simple bi-variate regressions for each 
 variable in the data */ 
 
-PROC UNIVARIATE DATA= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3 plot;
+PROC UNIVARIATE DATA= &LIB_NAME..&TRAINING_DATASET_CLEANSED_3 plot;
 VAR
 TEAM_BATTING_H
 TEAM_BATTING_2B
@@ -281,13 +279,13 @@ run;
 
 /* Check the results */ 
 
-PROC Univariate data= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3 plot; 
+PROC Univariate data= &LIB_NAME..&TRAINING_DATASET_CLEANSED_3 plot; 
 VAR Team_Pitching_H Log_Team_Pitching_H Cap_Team_Pitching_H;
 
 
 /* Run another regression */ 
 
-PROC REG DATA= &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+PROC REG DATA= &LIB_NAME..&TRAINING_DATASET_CLEANSED_3;
 MODEL TARGET_WINS =
 	TEAM_BATTING_H
 	TEAM_BATTING_2B
@@ -321,8 +319,8 @@ quit;
 /*save data into a new table*/ 
 
 /* add a variable for singles */ 
-DATA &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
-	SET &FOLDER_NAME..&TRAINING_DATASET_CLEANSED_3;
+DATA &LIB_NAME..&TRAINING_DATASET_CLEANSED_3;
+	SET &LIB_NAME..&TRAINING_DATASET_CLEANSED_3;
 /*IMP_Team_Batting_SO = Team_Batting_SO;*/ 
 M_Team_Batting_SO = 0;
 
